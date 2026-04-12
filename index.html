@@ -3,140 +3,217 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coin Crusher</title>
+    <title>Spiral Drop - Clone</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #1a1a2e;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            user-select: none;
-        }
-
-        .stats-container {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        h1 { font-size: 3rem; color: #f1c40f; margin: 0; }
-        p { font-size: 1.2rem; color: #bdc3c7; }
-
-        #coin {
-            width: 200px;
-            height: 200px;
-            background: radial-gradient(circle, #f1c40f 0%, #d4ac0d 100%);
-            border-radius: 50%;
-            border: 8px solid #b7950b;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 5rem;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
-        }
-
-        #coin:active {
-            transform: scale(0.95);
-        }
-
-        .shop {
-            margin-top: 40px;
-            background: #16213e;
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #0f3460;
-            width: 300px;
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #e94560;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        button:hover { background-color: #ff4d6d; }
-        button:disabled { background-color: #555; cursor: not-allowed; }
-
-        .upgrade-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            font-size: 0.9rem;
-        }
+        body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { background: #333; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #ui { position: absolute; top: 20px; text-align: center; pointer-events: none; width: 100%; }
+        .stat { font-size: 24px; font-weight: bold; margin: 5px; text-shadow: 2px 2px 4px #000; }
+        #msg { position: absolute; font-size: 48px; top: 40%; display: none; }
     </style>
 </head>
 <body>
 
-    <div class="stats-container">
-        <h1 id="coin-display">0</h1>
-        <p>Coins Collected</p>
-        <p>Coins per click: <span id="per-click-display">1</span></p>
+    <div id="ui">
+        <div class="stat">Level: <span id="levelVal">1</span></div>
+        <div class="stat">Coins: <span id="coinVal">0</span></div>
     </div>
+    <div id="msg">LEVEL CLEAR! +10 Coins</div>
 
-    <div id="coin">💰</div>
+    <canvas id="gameCanvas"></canvas>
 
-    <div class="shop">
-        <div class="upgrade-info">
-            <span>Better Hammer</span>
-            <span id="upgrade-cost">Cost: 10</span>
-        </div>
-        <button id="upgrade-btn">Buy Upgrade (+1 per click)</button>
-    </div>
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const levelDisplay = document.getElementById('levelVal');
+    const coinDisplay = document.getElementById('coinVal');
+    const msgDisplay = document.getElementById('msg');
 
-    <script>
-        // Game State
-        let coins = 0;
-        let coinsPerClick = 1;
-        let upgradeCost = 10;
+    // Game Constants
+    canvas.width = 400;
+    canvas.height = 600;
+    const centerX = canvas.width / 2;
+    const pillarWidth = 40;
+    const gravity = 0.25;
+    const bounceStrength = -7;
 
-        // DOM Elements
-        const coinDisplay = document.getElementById('coin-display');
-        const perClickDisplay = document.getElementById('per-click-display');
-        const upgradeCostDisplay = document.getElementById('upgrade-cost');
-        const coinBtn = document.getElementById('coin');
-        const upgradeBtn = document.getElementById('upgrade-btn');
+    // Game State
+    let level = 1;
+    let coins = 0;
+    let rotation = 0;
+    let isDragging = false;
+    let lastMouseX = 0;
 
-        // Logic: Clicking the Coin
-        coinBtn.addEventListener('click', () => {
-            coins += coinsPerClick;
-            updateUI();
-        });
+    let ball = {
+        y: 100,
+        dy: 0,
+        r: 10,
+        color: '#ff3e3e'
+    };
 
-        // Logic: Buying Upgrade
-        upgradeBtn.addEventListener('click', () => {
-            if (coins >= upgradeCost) {
-                coins -= upgradeCost;
-                coinsPerClick += 1;
-                upgradeCost = Math.round(upgradeCost * 1.5); // Increase cost for next time
-                updateUI();
+    let platforms = [];
+    const platformSpacing = 150;
+    const platformCount = 6;
+
+    function initLevel() {
+        platforms = [];
+        for (let i = 0; i < platformCount; i++) {
+            // Create a gap in the circle
+            let gapAngle = Math.random() * Math.PI * 2;
+            // Add a danger zone (red part)
+            let dangerAngle = gapAngle + Math.PI * 0.5 + Math.random() * Math.PI;
+            
+            platforms.push({
+                y: 300 + (i * platformSpacing),
+                gapStart: gapAngle,
+                gapEnd: gapAngle + 0.8, // Gap width
+                dangerStart: dangerAngle,
+                dangerEnd: dangerAngle + 0.4,
+                cleared: false
+            });
+        }
+        // Goal platform at the end
+        platforms.push({ y: 300 + (platformCount * platformSpacing), isGoal: true });
+        ball.y = 100;
+        ball.dy = 0;
+    }
+
+    // Input Handling
+    window.addEventListener('mousedown', e => { isDragging = true; lastMouseX = e.clientX; });
+    window.addEventListener('mousemove', e => {
+        if (isDragging) {
+            let delta = e.clientX - lastMouseX;
+            rotation += delta * 0.01;
+            lastMouseX = e.clientX;
+        }
+    });
+    window.addEventListener('mouseup', () => isDragging = false);
+
+    // Touch support
+    window.addEventListener('touchstart', e => { isDragging = true; lastMouseX = e.touches[0].clientX; });
+    window.addEventListener('touchmove', e => {
+        if (isDragging) {
+            let delta = e.touches[0].clientX - lastMouseX;
+            rotation += delta * 0.01;
+            lastMouseX = e.touches[0].clientX;
+        }
+    });
+    window.addEventListener('touchend', () => isDragging = false);
+
+    function update() {
+        ball.dy += gravity;
+        ball.y += ball.dy;
+
+        // Collision Detection
+        platforms.forEach(p => {
+            let relativeBallY = ball.y - (canvas.height / 2 - 100); // Ball visual offset
+            let platformScreenY = p.y - ball.y + 200;
+
+            // Check if ball is hitting the platform height (y-axis)
+            if (ball.dy > 0 && platformScreenY > 240 && platformScreenY < 260) {
+                
+                // Calculate current angle of the ball relative to pillar rotation
+                let angle = (Math.PI / 2 - rotation) % (Math.PI * 2);
+                if (angle < 0) angle += Math.PI * 2;
+
+                // Check if ball is in the gap
+                let inGap = angle > p.gapStart && angle < p.gapEnd;
+                
+                if (!inGap) {
+                    if (p.isGoal) {
+                        completeLevel();
+                    } else {
+                        // Check if hitting danger zone
+                        let inDanger = angle > (p.dangerStart % (Math.PI*2)) && angle < (p.dangerEnd % (Math.PI*2));
+                        if(inDanger) {
+                            gameOver();
+                        } else {
+                            ball.dy = bounceStrength;
+                            ball.y = p.y - 10; // Snap to top
+                        }
+                    }
+                }
             }
         });
 
-        // Update UI helper
-        function updateUI() {
-            coinDisplay.innerText = Math.floor(coins);
-            perClickDisplay.innerText = coinsPerClick;
-            upgradeCostDisplay.innerText = `Cost: ${upgradeCost}`;
-            
-            // Disable button if you can't afford it
-            upgradeBtn.disabled = coins < upgradeCost;
-        }
+        // Fail if ball goes too high (optional reset)
+        if (ball.y < -500) ball.y = 100;
+    }
 
-        // Initialize UI
-        updateUI();
-    </script>
+    function completeLevel() {
+        level++;
+        coins += 10;
+        levelDisplay.innerText = level;
+        coinDisplay.innerText = coins;
+        msgDisplay.style.display = 'block';
+        setTimeout(() => {
+            msgDisplay.style.display = 'none';
+            initLevel();
+        }, 1000);
+    }
+
+    function gameOver() {
+        alert("Hit a red zone! Restarting level.");
+        initLevel();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Central Pillar
+        ctx.fillStyle = '#444';
+        ctx.fillRect(centerX - pillarWidth/2, 0, pillarWidth, canvas.height);
+
+        // Draw Platforms
+        platforms.forEach(p => {
+            let screenY = p.y - ball.y + 250; // Camera follow effect
+            if (screenY < -50 || screenY > canvas.height + 50) return;
+
+            ctx.save();
+            ctx.translate(centerX, screenY);
+            ctx.rotate(rotation);
+
+            // Draw Ring
+            ctx.lineWidth = 15;
+            ctx.strokeStyle = p.isGoal ? '#gold' : '#555';
+            if (p.isGoal) ctx.strokeStyle = '#FFD700';
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 80, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw Gap
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(0, 0, 85, p.gapStart, p.gapEnd);
+            ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
+
+            // Draw Danger Zone
+            if (!p.isGoal) {
+                ctx.strokeStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(0, 0, 80, p.dangerStart, p.dangerEnd);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        });
+
+        // Draw Ball (Fixed in center-ish of screen)
+        ctx.fillStyle = ball.color;
+        ctx.beginPath();
+        ctx.arc(centerX, 250, ball.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        requestAnimationFrame(() => {
+            update();
+            draw();
+        });
+    }
+
+    initLevel();
+    draw();
+</script>
 </body>
 </html>
