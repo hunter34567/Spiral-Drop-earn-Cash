@@ -3,43 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spiral Drop</title>
+    <title>Stack Ball 3D - Full Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; user-select: none; }
-        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; z-index: 10; }
-        #score-container { font-size: 42px; font-weight: 900; line-height: 1; }
-        #coin-container { font-size: 22px; color: #ffd700; margin-top: 10px; font-weight: bold; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a1a; user-select: none; }
+        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; }
+        #score-container { font-size: 42px; font-weight: 900; margin-bottom: 0; line-height: 1; }
+        #high-score-container { font-size: 14px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        #coin-container { font-size: 22px; color: #ffd700; margin-top: 10px; font-weight: bold; text-shadow: 0 0 10px rgba(255, 215, 0, 0.4); }
+        #level-progress { font-size: 16px; margin-top: 15px; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2); }
+        
         #message { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            color: white; display: none; text-align: center; background: rgba(0,0,0,0.9); 
-            padding: 40px; border-radius: 24px; width: 70%; max-width: 350px; border: 2px solid #333; z-index: 20;
+            color: white; display: none; text-align: center; background: rgba(0,0,0,0.85); 
+            padding: 40px; border-radius: 24px; width: 70%; max-width: 350px; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
         }
+        h1 { margin: 0; font-size: 36px; text-transform: uppercase; }
+        #final-stats { margin: 20px 0; font-size: 18px; color: #ccc; }
+        .tap-to-start { font-size: 16px; color: #4caf50; animation: blink 1s infinite; font-weight: bold; }
+        
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
         canvas { display: block; touch-action: none; }
-        .tap-to-start { font-size: 16px; color: #4caf50; animation: blink 1s infinite; margin-top: 20px; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     </style>
 </head>
 <body>
 
 <div id="ui">
     <div id="score-container"><span id="score">0</span></div>
+    <div id="high-score-container">BEST: <span id="highscore">0</span></div>
     <div id="coin-container">🪙 <span id="coins">0</span></div>
     <div id="level-progress">LEVEL <span id="level">1</span></div>
 </div>
 
 <div id="message">
     <h1 id="msg-text">GAME OVER</h1>
-    <p class="tap-to-start">TAP TO RESTART</p>
+    <p id="final-stats"></p>
+    <p class="tap-to-start">TAP TO CONTINUE</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-/** CLEAN GAME LOGIC **/
-let scene, camera, renderer, ball, tower, platforms = [];
-let score = 0, coins = parseInt(localStorage.getItem('stackBallCoins')) || 0;
-let currentLevel = 1, isPressing = false, gameOver = false;
-let ballVelocity = 0, gravity = -0.012, bounce = 0.2, smash = -0.35;
+/** CONFIG & STATE **/
+let scene, camera, renderer, ball, tower;
+let platforms = [];
+let score = 0;
+let highScore = parseInt(localStorage.getItem('stackBallHighScore')) || 0;
+let coins = parseInt(localStorage.getItem('stackBallCoins')) || 0;
+let currentLevel = 1;
+let isPressing = false;
+let gameOver = false;
+let stackCount = 25; 
+let ballVelocity = 0;
+
+const gravity = -0.015;
+const bounceVelocity = 0.22;
+const smashVelocity = -0.4;
+
+// UI Elements
+const uiScore = document.getElementById('score');
+const uiHighScore = document.getElementById('highscore');
+const uiCoins = document.getElementById('coins');
+const uiLevel = document.getElementById('level');
+const uiMsg = document.getElementById('message');
+const uiStats = document.getElementById('final-stats');
+const msgText = document.getElementById('msg-text');
 
 init();
 animate();
@@ -47,19 +75,32 @@ animate();
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a1a);
+
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 5, 15);
+
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
     document.body.appendChild(renderer.domElement);
+
     const light = new THREE.DirectionalLight(0xffffff, 1.2);
     light.position.set(5, 10, 7.5);
-    scene.add(light, new THREE.AmbientLight(0x404040, 1));
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x404040, 0.8));
+
+    uiCoins.innerText = coins;
+    uiHighScore.innerText = highScore;
     createLevel();
-    window.addEventListener('mousedown', () => { if(!gameOver) isPressing = true; });
-    window.addEventListener('mouseup', () => isPressing = false);
-    window.addEventListener('touchstart', () => { if(!gameOver) isPressing = true; });
-    window.addEventListener('touchend', () => isPressing = false);
+
+    // Controls
+    const startPress = (e) => { if(!gameOver) isPressing = true; e.preventDefault(); };
+    const endPress = () => isPressing = false;
+
+    window.addEventListener('mousedown', startPress);
+    window.addEventListener('mouseup', endPress);
+    window.addEventListener('touchstart', startPress, {passive: false});
+    window.addEventListener('touchend', endPress);
 }
 
 function createLevel() {
@@ -67,63 +108,155 @@ function createLevel() {
     if(ball) scene.remove(ball);
     platforms = [];
     gameOver = false;
-    document.getElementById('message').style.display = 'none';
+    uiMsg.style.display = 'none';
+    score = 0;
+    uiScore.innerText = score;
+    
+    // Difficulty scaling: Taller towers as you level up
+    stackCount = 20 + (currentLevel * 3);
+
     tower = new THREE.Group();
     scene.add(tower);
-    const stackCount = 20 + (currentLevel * 2);
+
+    // Pillar
+    const pillarGeo = new THREE.CylinderGeometry(0.6, 0.6, stackCount * 1.5 + 5, 32);
+    const pillarMat = new THREE.MeshPhongMaterial({ color: 0x050505 });
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.y = - (stackCount * 0.75);
+    tower.add(pillar);
+
+    // Platform Colors (shifts every level)
+    const levelHue = (currentLevel * 137.5) % 360; 
+
     for (let i = 0; i < stackCount; i++) {
-        const p = new THREE.Group();
-        p.position.y = -i * 1.5;
-        p.rotation.y = i * 0.3;
-        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 0.5, 32, 1, false, 0, Math.PI * 1.5), new THREE.MeshPhongMaterial({ color: 0x4caf50 }));
-        const trap = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 0.5, 32, 1, false, Math.PI * 1.5, Math.PI * 0.5), new THREE.MeshPhongMaterial({ color: 0x000000 }));
-        trap.userData.isTrap = true;
-        p.add(mesh, trap);
-        tower.add(p);
-        platforms.push(p);
+        const platform = new THREE.Group();
+        platform.position.y = -i * 1.5;
+        platform.rotation.y = i * 0.4;
+
+        // Colored Segment
+        const segmentGeo = new THREE.CylinderGeometry(3, 3, 0.5, 32, 1, false, 0, Math.PI * 1.6);
+        const segmentMat = new THREE.MeshPhongMaterial({ color: new THREE.Color(`hsl(${levelHue}, 70%, 50%)`) });
+        const mesh = new THREE.Mesh(segmentGeo, segmentMat);
+        
+        // Trap (Black)
+        const trapGeo = new THREE.CylinderGeometry(3, 3, 0.5, 32, 1, false, Math.PI * 1.6, Math.PI * 0.4);
+        const trapMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+        const trapMesh = new THREE.Mesh(trapGeo, trapMat);
+        trapMesh.isTrap = true;
+
+        platform.add(mesh, trapMesh);
+        tower.add(platform);
+        platforms.push(platform);
     }
-    ball = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 32), new THREE.MeshPhongMaterial({ color: 0xffffff }));
+
+    // Ball
+    const ballGeo = new THREE.SphereGeometry(0.4, 32, 32);
+    const ballMat = new THREE.MeshPhongMaterial({ color: 0xffffff, emissive: 0x222222 });
+    ball = new THREE.Mesh(ballGeo, ballMat);
     ball.position.set(0, 1, 2.5);
     scene.add(ball);
 }
 
+function updateHighScore() {
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('stackBallHighScore', highScore);
+        uiHighScore.innerText = highScore;
+    }
+}
+
 function animate() {
     requestAnimationFrame(animate);
-    if (gameOver) return;
-    tower.rotation.y += 0.025;
-    if (isPressing) ballVelocity = smash; else ballVelocity += gravity;
-    ball.position.y += ballVelocity;
-    platforms.forEach((p, i) => {
-        const diff = ball.position.y - p.position.y;
-        if (diff < 0.2 && diff > -0.5) {
-            let rot = (tower.rotation.y + p.rotation.y) % (Math.PI * 2);
-            if (rot < 0) rot += Math.PI * 2;
-            if (isPressing) {
-                if (rot > 4.75 && rot < 6.25) endGame(false);
-                else { p.visible = false; platforms.splice(i, 1); score += 10; document.getElementById('score').innerText = score; if (platforms.length === 0) endGame(true); }
-            } else if (ballVelocity < 0) { ballVelocity = bounce; ball.position.y = p.position.y + 0.3; }
+
+    if (!gameOver) {
+        tower.rotation.y += 0.03 + (currentLevel * 0.002); // Faster rotation as levels increase
+
+        if (isPressing) {
+            ballVelocity = smashVelocity;
+        } else {
+            ballVelocity += gravity;
         }
-    });
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, ball.position.y + 6, 0.1);
-    camera.lookAt(0, ball.position.y, 0);
+        
+        ball.position.y += ballVelocity;
+
+        // Collision logic
+        platforms.forEach((p, index) => {
+            const dist = ball.position.y - p.position.y;
+            
+            if (dist < 0.2 && dist > -0.5) {
+                let currentRot = (tower.rotation.y + p.rotation.y) % (Math.PI * 2);
+                if (currentRot < 0) currentRot += Math.PI * 2;
+
+                // Check if ball is over the black trap segment
+                const isOverTrap = currentRot > 4.7 && currentRot < 6.2;
+
+                if (isPressing) {
+                    if (isOverTrap) {
+                        endGame(false);
+                    } else {
+                        // Smashed a piece
+                        p.visible = false;
+                        platforms.splice(index, 1);
+                        score += 10;
+                        uiScore.innerText = score;
+                        updateHighScore();
+                        
+                        if (platforms.length === 0) endGame(true);
+                    }
+                } else if (ballVelocity < 0) {
+                    ballVelocity = bounceVelocity;
+                    ball.position.y = p.position.y + 0.3; // Snap to top for clean bounce
+                }
+            }
+        });
+
+        // Camera smoothly follows ball
+        camera.position.y = THREE.MathUtils.lerp(camera.position.y, ball.position.y + 5, 0.1);
+        camera.lookAt(0, ball.position.y - 2, 0);
+    }
+
     renderer.render(scene, camera);
 }
 
 function endGame(win) {
     gameOver = true;
-    document.getElementById('message').style.display = 'block';
+    isPressing = false;
+    uiMsg.style.display = 'block';
+    updateHighScore();
     
     if (win) {
-        document.getElementById('msg-text').innerText = "WIN!";
-        coins += 100;
+        msgText.innerText = "LEVEL CLEAR!";
+        msgText.style.color = "#4CAF50";
+        const earned = 50 + (currentLevel * 10);
+        coins += earned;
         localStorage.setItem('stackBallCoins', coins);
-        document.getElementById('coins').innerText = coins;
+        uiCoins.innerText = coins;
+        uiStats.innerText = `You earned ${earned} coins!`;
         currentLevel++;
+        uiLevel.innerText = currentLevel;
     } else {
-        document.getElementById('msg-text').innerText = "CRASH!";
+        msgText.innerText = "CRASHED!";
+        msgText.style.color = "#FF5252";
+        uiStats.innerText = `Final Score: ${score}`;
     }
-    setTimeout(() => { window.addEventListener('mousedown', createLevel, {once: true}); }, 1000);
+
+    // Delay restart click to prevent accidental double-tap
+    setTimeout(() => {
+        const restart = () => {
+            createLevel();
+            window.removeEventListener('mousedown', restart);
+            window.removeEventListener('touchstart', restart);
+        };
+        window.addEventListener('mousedown', restart);
+        window.addEventListener('touchstart', restart);
+    }, 800);
 }
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 </body>
 </html>
