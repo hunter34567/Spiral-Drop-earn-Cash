@@ -3,197 +3,278 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Survival V11 | Extraction</title>
+    <title>Survival | Definitive Edition</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
-        .bar-container { width: 300px; height: 22px; border: 2px solid #222; background: rgba(0,0,0,0.8); border-radius: 4px; position: relative; }
-        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #d63031, #ff7675); transition: 0.2s; }
+        .bar-container { width: 250px; height: 15px; border: 1px solid #333; background: rgba(0,0,0,0.8); margin: 5px 0; border-radius: 3px; overflow: hidden; }
+        #hp-fill { width: 100%; height: 100%; background: #ff4757; transition: 0.3s; }
+        #xp-fill { width: 0%; height: 100%; background: #2ed573; transition: 0.1s; }
         
-        #minimap { 
-            position: absolute; bottom: 20px; right: 20px; width: 180px; height: 180px; 
-            background: rgba(0, 40, 0, 0.4); border: 2px solid #00ff41; border-radius: 50%; overflow: hidden;
-        }
-        #time-display { position: absolute; top: 20px; right: 20px; font-size: 28px; font-weight: bold; color: #fdcb6e; text-shadow: 0 0 10px rgba(253, 203, 110, 0.5); }
-        #alert { position: absolute; top: 20%; width: 100%; text-align: center; font-size: 40px; color: #fab1a0; opacity: 0; transition: 1s; font-weight: bold; text-transform: uppercase; }
-        canvas { background: #0c0c0c; border: 4px solid #1a1a1a; box-shadow: 0 0 50px rgba(0,0,0,1); }
+        /* Overlays */
+        .overlay { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
+        .grid { display: flex; gap: 15px; margin-top: 20px; }
+        .card { width: 180px; padding: 20px; border: 2px solid #444; background: #111; cursor: pointer; text-align: center; transition: 0.2s; }
+        .card:hover { border-color: #0f0; transform: translateY(-5px); }
+        
+        #minimap { position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; background: rgba(0,20,0,0.5); border: 2px solid #0f0; border-radius: 50%; overflow: hidden; }
+        #time-ui { position: absolute; top: 20px; right: 20px; font-size: 24px; color: #f1c40f; font-weight: bold; }
+        #announcer { position: absolute; top: 30%; width: 100%; text-align: center; font-size: 40px; color: #fff; pointer-events: none; opacity: 0; transition: 1s; z-index: 150; }
+        canvas { background: #080808; border: 2px solid #222; cursor: crosshair; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div style="font-size: 12px; letter-spacing: 2px; color: #aaa;">VITAL SIGNS</div>
+    <div id="scrap-text" style="font-size: 32px; color: #f1c40f; font-weight: bold;">$ 0</div>
     <div class="bar-container"><div id="hp-fill"></div></div>
-    <div id="scrap-display" style="font-size: 32px; color: #ffeaa7;">$ 0</div>
+    <div class="bar-container" style="height: 6px;"><div id="xp-fill"></div></div>
+    <div style="font-size: 12px; color: #888;">LVL <span id="lvl-text">1</span> | WAVE <span id="wave-text">1</span></div>
 </div>
 
-<div id="time-display">06:00 PM</div>
-<div id="alert">EXTRACTOR INBOUND</div>
-<div id="minimap"><canvas id="m-canvas" width="180" height="180"></canvas></div>
+<div id="time-ui">06:00 PM</div>
+<div id="announcer">WAVE START</div>
 
+<div id="menu-overlay" class="overlay">
+    <h1 id="menu-title">SELECT UPGRADE</h1>
+    <div id="menu-options" class="grid"></div>
+    <button id="close-menu" style="margin-top: 30px; padding: 10px 30px; background: #0f0; border: none; cursor: pointer; display: none;">CONTINUE</button>
+</div>
+
+<div id="minimap"><canvas id="m-canvas" width="150" height="150"></canvas></div>
 <canvas id="game"></canvas>
 
 <script>
+/** GAME CONFIGURATION **/
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const mCanvas = document.getElementById('m-canvas');
 const mCtx = mCanvas.getContext('2d');
+canvas.width = 1100; canvas.height = 750;
 
-canvas.width = 1200; canvas.height = 800;
+let frame = 0, scrap = 0, xp = 0, lvl = 1, wave = 1;
+let hour = 18, minute = 0, isNight = false, gameActive = true;
+let extractReady = false, exX = 0, exY = 0;
 
-// System Variables
-let frame = 0, scrap = 0, hour = 18, minute = 0;
-let extractReady = false, extractX = 0, extractY = 0;
-let player = { x: 600, y: 400, r: 16, hp: 100, maxHp: 100, speed: 4.8, angle: 0 };
-let entities = { enemies: [], bullets: [], blood: [], drops: [] };
+let player = { 
+    x: 550, y: 375, r: 14, hp: 100, maxHp: 100, speed: 4.2, 
+    angle: 0, dashCd: 0, isDashing: 0, lastShot: 0,
+    dmgMult: 1, fireRateMult: 1, leech: 0
+};
+
+const guns = [
+    { name: "PISTOL", rate: 15, dmg: 1.2, speed: 12, spread: 0.05, count: 1, unlocked: true },
+    { name: "SMG", rate: 6, dmg: 0.8, speed: 14, spread: 0.18, count: 1, unlocked: false, cost: 400 },
+    { name: "SHOTGUN", rate: 45, dmg: 1.6, speed: 10, spread: 0.4, count: 6, unlocked: false, cost: 800 },
+    { name: "SNIPER", rate: 70, dmg: 15, speed: 25, spread: 0, count: 1, unlocked: false, cost: 1500 }
+];
+let currentGun = 0;
+
+const AUGMENTS = [
+    { name: "REINFORCED", desc: "+40 Max HP", run: () => { player.maxHp += 40; player.hp += 40; } },
+    { name: "HOLLOW POINT", desc: "+25% Damage", run: () => { player.dmgMult += 0.25; } },
+    { name: "OVERCLOCK", desc: "+20% Fire Rate", run: () => { player.fireRateMult += 0.2; } },
+    { name: "ADRENALINE", desc: "+15% Move Speed", run: () => { player.speed += 0.6; } },
+    { name: "VAMPIRE", desc: "Heal on Kill", run: () => { player.leech += 1; } }
+];
+
+let entities = { enemies: [], bullets: [], eBullets: [], blood: [], barrels: [], turrets: [] };
+let spawned = 0, toSpawn = 8, nextSpawn = 0;
 let keys = {};
 
-// Input Logic
-window.onkeydown = e => keys[e.code] = true;
+/** INPUTS **/
+window.onkeydown = e => { 
+    keys[e.code] = true;
+    if (e.key >= 1 && e.key <= 4 && guns[e.key-1].unlocked) currentGun = e.key-1;
+    if (e.code === 'Space' && player.dashCd <= 0) { player.isDashing = 10; player.dashCd = 60; }
+};
 window.onkeyup = e => keys[e.code] = false;
+window.onmousemove = e => {
+    const r = canvas.getBoundingClientRect();
+    player.angle = Math.atan2(e.clientY - r.top - player.y, e.clientX - r.left - player.x);
+};
+window.onmousedown = () => { if(gameActive && !extractReady) fireGun(); };
 
-function spawnEnemy() {
-    const side = Math.floor(Math.random() * 4);
-    let x = side % 2 === 0 ? Math.random() * 1200 : (side === 1 ? 1250 : -50);
-    let y = side % 2 !== 0 ? Math.random() * 800 : (side === 0 ? -50 : 850);
-    let isHeavy = Math.random() > 0.9;
-    entities.enemies.push({ 
-        x, y, r: isHeavy ? 28 : 16, 
-        hp: (isHeavy ? 15 : 3) + (hour >= 23 ? 10 : 0), 
-        speed: (isHeavy ? 1.5 : 2.5) + (hour >= 22 ? 1 : 0),
-        color: isHeavy ? '#6c5ce7' : '#ff7675'
-    });
+/** LOGIC **/
+function fireGun() {
+    let g = guns[currentGun];
+    if (frame - player.lastShot < g.rate / player.fireRateMult) return;
+    for(let i=0; i<g.count; i++) {
+        let a = player.angle + (Math.random()-0.5)*g.spread;
+        entities.bullets.push({ x: player.x, y: player.y, vx: Math.cos(a)*g.speed, vy: Math.sin(a)*g.speed, dmg: g.dmg * player.dmgMult });
+    }
+    player.lastShot = frame;
+}
+
+function openMenu(type) {
+    gameActive = false;
+    const overlay = document.getElementById('menu-overlay');
+    const container = document.getElementById('menu-options');
+    const btn = document.getElementById('close-menu');
+    container.innerHTML = '';
+    overlay.style.display = 'flex';
+
+    if (type === 'level') {
+        document.getElementById('menu-title').innerText = "LEVEL UP: CHOOSE AUGMENT";
+        btn.style.display = 'none';
+        let items = [...AUGMENTS].sort(() => 0.5 - Math.random()).slice(0, 3);
+        items.forEach(aug => {
+            let div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `<h3>${aug.name}</h3><p>${aug.desc}</p>`;
+            div.onclick = () => { aug.run(); overlay.style.display = 'none'; gameActive = true; };
+            container.appendChild(div);
+        });
+    } else if (type === 'shop') {
+        document.getElementById('menu-title').innerText = "BLACK MARKET";
+        btn.style.display = 'block';
+        btn.onclick = () => { overlay.style.display = 'none'; gameActive = true; startWave(); };
+        guns.forEach((g, i) => {
+            if (i === 0) return;
+            let div = document.createElement('div');
+            div.className = 'card' + (g.unlocked ? ' owned' : '');
+            div.innerHTML = `<h3>${g.name}</h3><p>${g.unlocked ? 'OWNED' : '$'+g.cost}</p>`;
+            div.onclick = () => {
+                if (!g.unlocked && scrap >= g.cost) {
+                    scrap -= g.cost; g.unlocked = true; div.innerHTML = `<h3>${g.name}</h3><p>OWNED</p>`;
+                }
+            };
+            container.appendChild(div);
+        });
+    }
+}
+
+function startWave() {
+    wave++; spawned = 0; toSpawn = 8 + (wave * 4);
+    announce("WAVE " + wave);
+    // Spawn barrels
+    for(let i=0; i<3; i++) entities.barrels.push({ x: Math.random()*1000+50, y: Math.random()*700+50, hp: 5 });
+}
+
+function announce(t) {
+    const a = document.getElementById('announcer');
+    a.innerText = t; a.style.opacity = 1;
+    setTimeout(() => a.style.opacity = 0, 2000);
 }
 
 function update() {
+    if (!gameActive) return;
     frame++;
-    
-    // Time & Event Management
-    if (frame % 8 === 0) {
-        minute++;
-        if (minute >= 60) { minute = 0; hour++; }
-        if (hour >= 24) hour = 0;
-        document.getElementById('time-display').innerText = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
-        
-        // Extraction Spawn at Midnight
-        if (hour === 0 && !extractReady) {
-            extractReady = true;
-            extractX = Math.random() * 800 + 200;
-            extractY = Math.random() * 400 + 200;
-            document.getElementById('alert').style.opacity = 1;
-        }
+    if (player.dashCd > 0) player.dashCd--;
+    if (player.isDashing > 0) player.isDashing--;
+
+    // Clock Logic
+    if (frame % 10 === 0) {
+        minute++; if (minute >= 60) { minute = 0; hour++; }
+        if (hour === 24) hour = 0;
+        isNight = (hour >= 20 || hour < 6);
+        document.getElementById('time-ui').innerText = `${hour.toString().padStart(2,'0')}:${minute.toString().padStart(2,'0')} ${hour>=12?'PM':'AM'}`;
+        if (hour === 0 && !extractReady) { extractReady = true; exX = Math.random()*800+150; exY = Math.random()*500+150; announce("EXTRACTION READY"); }
+    }
+
+    // Wave Completion
+    if (entities.enemies.length === 0 && spawned >= toSpawn) { openMenu('shop'); spawned = -1; return; }
+
+    // Spawn Enemies
+    if (frame > nextSpawn && spawned < toSpawn && spawned !== -1) {
+        let side = Math.floor(Math.random()*4);
+        let x = side%2==0 ? Math.random()*1100 : (side==1?1150:-50);
+        let y = side%2!=0 ? Math.random()*750 : (side==0?-50:800);
+        let elite = Math.random() < 0.1;
+        entities.enemies.push({ x, y, r: elite?25:15, hp: (elite?15:3)+wave, speed: (elite?1.5:2.5)+(isNight?1:0), elite });
+        spawned++; nextSpawn = frame + (isNight ? 25 : 50);
     }
 
     // Player Movement
-    if (keys['KeyW']) player.y -= player.speed;
-    if (keys['KeyS']) player.y += player.speed;
-    if (keys['KeyA']) player.x -= player.speed;
-    if (keys['KeyD']) player.x += player.speed;
+    let s = player.isDashing > 0 ? player.speed * 2.5 : player.speed;
+    if (keys['KeyW']) player.y -= s; if (keys['KeyS']) player.y += s;
+    if (keys['KeyA']) player.x -= s; if (keys['KeyD']) player.x += s;
 
-    // Enemy Spawning - Difficulty spikes after 10 PM
-    let spawnRate = hour >= 22 ? 15 : 45;
-    if (frame % spawnRate === 0) spawnEnemy();
-
-    // AI and Collision
-    entities.enemies.forEach((en, ei) => {
-        let dist = Math.hypot(player.x - en.x, player.y - en.y);
-        en.x += ((player.x - en.x) / dist) * en.speed;
-        en.y += ((player.y - en.y) / dist) * en.speed;
-
-        if (dist < player.r + en.r) player.hp -= 0.5;
-
-        entities.bullets.forEach((b, bi) => {
-            if (Math.hypot(b.x - en.x, b.y - en.y) < en.r) {
-                en.hp--;
-                entities.bullets.splice(bi, 1);
-                // Hit Effects
-                for(let i=0; i<2; i++) entities.blood.push({x: en.x, y: en.y, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, life: 1});
-                
+    // Bullet Physics
+    entities.bullets.forEach((b, bi) => {
+        b.x += b.vx; b.y += b.vy;
+        entities.enemies.forEach((en, ei) => {
+            if (Math.hypot(b.x-en.x, b.y-en.y) < en.r) {
+                en.hp -= b.dmg; entities.bullets.splice(bi, 1);
                 if (en.hp <= 0) {
-                    scrap += (en.r > 20 ? 200 : 50);
                     entities.enemies.splice(ei, 1);
+                    scrap += 50; xp += 20; 
+                    if (player.leech) player.hp = Math.min(player.maxHp, player.hp + player.leech);
+                    if (xp >= 100) { xp = 0; lvl++; openMenu('level'); }
                 }
             }
         });
+        if (b.x<0||b.x>1100||b.y<0||b.y>750) entities.bullets.splice(bi, 1);
     });
 
-    // Bullets
-    entities.bullets.forEach((b, i) => {
-        b.x += b.vx; b.y += b.vy;
-        if (b.x < 0 || b.x > 1200 || b.y < 0 || b.y > 800) entities.bullets.splice(i, 1);
+    // Enemy AI
+    entities.enemies.forEach(en => {
+        let d = Math.hypot(player.x-en.x, player.y-en.y);
+        en.x += ((player.x-en.x)/d)*en.speed; en.y += ((player.y-en.y)/d)*en.speed;
+        if (d < player.r + en.r && player.isDashing === 0) player.hp -= 0.5;
     });
 
-    // Extraction Check
-    if (extractReady && Math.hypot(player.x - extractX, player.y - extractY) < 50) {
-        alert(`EXTRACTION SUCCESSFUL! SCRAP COLLECTED: $${scrap}`);
-        location.reload();
+    // Extraction Logic
+    if (extractReady && Math.hypot(player.x-exX, player.y-exY) < 50) {
+        alert("YOU ESCAPED! SCORE: " + scrap); location.reload();
     }
 
-    // UI Updates
-    document.getElementById('hp-fill').style.width = player.hp + '%';
-    document.getElementById('scrap-display').innerText = `$ ${scrap}`;
-    if (player.hp <= 0) { alert("MIA: YOU DIED IN THE ZONE"); location.reload(); }
+    // UI
+    document.getElementById('hp-fill').style.width = (player.hp/player.maxHp*100)+'%';
+    document.getElementById('xp-fill').style.width = xp+'%';
+    document.getElementById('scrap-text').innerText = '$ ' + scrap;
+    document.getElementById('lvl-text').innerText = lvl;
+    document.getElementById('wave-text').innerText = wave;
+    if (player.hp <= 0) { alert("GAME OVER"); location.reload(); }
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    mCtx.clearRect(0, 0, 180, 180);
-
-    // Blood Stains
-    entities.blood.forEach((bl, i) => {
-        ctx.fillStyle = `rgba(214, 48, 49, ${bl.life})`;
-        ctx.fillRect(bl.x, bl.y, 3, 3);
-        bl.life -= 0.01; if (bl.life <= 0) entities.blood.splice(i, 1);
-    });
+    ctx.clearRect(0, 0, 1100, 750);
+    mCtx.clearRect(0, 0, 150, 150);
 
     // Extraction Zone
     if (extractReady) {
-        ctx.strokeStyle = '#00ff41';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(extractX, extractY, 50 + Math.sin(frame/10)*10, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.fillStyle = 'rgba(0, 255, 65, 0.1)';
-        ctx.fill();
+        ctx.strokeStyle = '#0f0'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(exX, exY, 50 + Math.sin(frame/10)*5, 0, Math.PI*2); ctx.stroke();
     }
 
-    // Enemies
-    entities.enemies.forEach(en => {
-        ctx.fillStyle = en.color;
-        ctx.beginPath(); ctx.arc(en.x, en.y, en.r, 0, Math.PI*2); ctx.fill();
-        // Minimap
-        mCtx.fillStyle = '#ff7675';
-        mCtx.fillRect(90 + (en.x - player.x)/10, 90 + (en.y - player.y)/10, 3, 3);
+    // Barrels
+    ctx.fillStyle = '#555';
+    entities.barrels.forEach((br, i) => {
+        ctx.fillRect(br.x-15, br.y-15, 30, 30);
+        if (Math.hypot(player.x-br.x, player.y-br.y) < 40) { scrap += 200; entities.barrels.splice(i, 1); announce("LOOT FOUND"); }
     });
 
-    // Bullets
-    ctx.fillStyle = '#fdcb6e';
+    // Entities
+    entities.enemies.forEach(en => {
+        ctx.fillStyle = en.elite ? '#ffa500' : '#ff4757';
+        ctx.beginPath(); ctx.arc(en.x, en.y, en.r, 0, Math.PI*2); ctx.fill();
+        // Minimap
+        mCtx.fillStyle = '#f00';
+        mCtx.fillRect(75 + (en.x-player.x)/10, 75 + (en.y-player.y)/10, 3, 3);
+    });
+
+    ctx.fillStyle = '#f1c40f';
     entities.bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill(); });
 
     // Player
-    ctx.fillStyle = '#0984e3';
-    ctx.fillRect(player.x-16, player.y-16, 32, 32);
-    mCtx.fillStyle = '#0984e3';
-    mCtx.fillRect(88, 88, 4, 4); // Center of minimap
+    ctx.save();
+    ctx.translate(player.x, player.y); ctx.rotate(player.angle);
+    ctx.fillStyle = player.isDashing > 0 ? '#fff' : '#00d2ff';
+    ctx.fillRect(-15, -15, 30, 30);
+    ctx.fillStyle = '#333'; ctx.fillRect(15, -5, 15, 10);
+    ctx.restore();
 
-    // Vignette / Lighting
-    let darkness = (hour >= 20 || hour < 6) ? 0.7 : 0;
-    let grd = ctx.createRadialGradient(player.x, player.y, 50, player.x, player.y, 400);
-    grd.addColorStop(0, "rgba(0,0,0,0)");
-    grd.addColorStop(1, `rgba(0,0,0,${darkness})`);
-    ctx.fillStyle = grd;
-    ctx.fillRect(0,0,1200,800);
+    // Night Vignette
+    if (isNight) {
+        let g = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, 350);
+        g.addColorStop(0, 'transparent'); g.addColorStop(1, 'rgba(0,0,0,0.8)');
+        ctx.fillStyle = g; ctx.fillRect(0,0,1100,750);
+    }
 
     update();
     requestAnimationFrame(draw);
 }
-
-window.onmousedown = (e) => {
-    let r = canvas.getBoundingClientRect();
-    let angle = Math.atan2(e.clientY - r.top - player.y, e.clientX - r.left - player.x);
-    entities.bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*15, vy: Math.sin(angle)*15 });
-};
-
 draw();
 </script>
 </body>
