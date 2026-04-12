@@ -3,208 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Survival V2 | GitHub Edition</title>
+    <title>Survival V11 | Extraction</title>
     <style>
-        body { margin: 0; background: #050505; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 10; }
-        .bar { width: 200px; height: 12px; border: 1px solid #333; margin: 5px 0; background: #111; border-radius: 4px; overflow: hidden; }
-        #hp-fill { width: 100%; height: 100%; background: #ff4757; transition: 0.2s; }
-        #xp-fill { width: 0%; height: 100%; background: #2ed573; transition: 0.2s; }
-        canvas { background: #0a0a0a; box-shadow: 0 0 40px #000; cursor: crosshair; }
-        #tutorial { position: absolute; bottom: 10px; text-align: center; width: 100%; color: #666; font-size: 12px; }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
+        .bar-container { width: 300px; height: 22px; border: 2px solid #222; background: rgba(0,0,0,0.8); border-radius: 4px; position: relative; }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #d63031, #ff7675); transition: 0.2s; }
+        
+        #minimap { 
+            position: absolute; bottom: 20px; right: 20px; width: 180px; height: 180px; 
+            background: rgba(0, 40, 0, 0.4); border: 2px solid #00ff41; border-radius: 50%; overflow: hidden;
+        }
+        #time-display { position: absolute; top: 20px; right: 20px; font-size: 28px; font-weight: bold; color: #fdcb6e; text-shadow: 0 0 10px rgba(253, 203, 110, 0.5); }
+        #alert { position: absolute; top: 20%; width: 100%; text-align: center; font-size: 40px; color: #fab1a0; opacity: 0; transition: 1s; font-weight: bold; text-transform: uppercase; }
+        canvas { background: #0c0c0c; border: 4px solid #1a1a1a; box-shadow: 0 0 50px rgba(0,0,0,1); }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div>SURVIVOR LVL: <span id="lvl">1</span></div>
-    <div class="bar"><div id="hp-fill"></div></div>
-    <div>XP PROGRESS</div>
-    <div class="bar"><div id="xp-fill"></div></div>
-    <div id="score">KILLS: 0</div>
-    <div id="day-cycle">TIME: DAY</div>
+    <div style="font-size: 12px; letter-spacing: 2px; color: #aaa;">VITAL SIGNS</div>
+    <div class="bar-container"><div id="hp-fill"></div></div>
+    <div id="scrap-display" style="font-size: 32px; color: #ffeaa7;">$ 0</div>
 </div>
 
-<div id="tutorial">WASD to Move | Click to Shoot | Collect Green Orbs to Level Up | Survive the Night</div>
+<div id="time-display">06:00 PM</div>
+<div id="alert">EXTRACTOR INBOUND</div>
+<div id="minimap"><canvas id="m-canvas" width="180" height="180"></canvas></div>
+
 <canvas id="game"></canvas>
 
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-canvas.width = 900;
-canvas.height = 600;
+const mCanvas = document.getElementById('m-canvas');
+const mCtx = mCanvas.getContext('2d');
 
-// Game State
-let player = { x: 450, y: 300, r: 12, hp: 100, maxHp: 100, speed: 3.5, xp: 0, lvl: 1, angle: 0 };
-let bullets = [];
-let enemies = [];
-let particles = [];
-let gems = [];
-let kills = 0;
-let frame = 0;
-let isDay = true;
+canvas.width = 1200; canvas.height = 800;
+
+// System Variables
+let frame = 0, scrap = 0, hour = 18, minute = 0;
+let extractReady = false, extractX = 0, extractY = 0;
+let player = { x: 600, y: 400, r: 16, hp: 100, maxHp: 100, speed: 4.8, angle: 0 };
+let entities = { enemies: [], bullets: [], blood: [], drops: [] };
 let keys = {};
 
-// Input
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
-window.addEventListener('mousemove', e => {
-    const rect = canvas.getBoundingClientRect();
-    player.angle = Math.atan2(e.clientY - rect.top - player.y, e.clientX - rect.left - player.x);
-});
-window.addEventListener('mousedown', () => {
-    bullets.push({ x: player.x, y: player.y, vx: Math.cos(player.angle) * 7, vy: Math.sin(player.angle) * 7, r: 4 });
-});
+// Input Logic
+window.onkeydown = e => keys[e.code] = true;
+window.onkeyup = e => keys[e.code] = false;
 
 function spawnEnemy() {
-    let x, y;
-    if (Math.random() < 0.5) {
-        x = Math.random() < 0.5 ? -30 : canvas.width + 30;
-        y = Math.random() * canvas.height;
-    } else {
-        x = Math.random() * canvas.width;
-        y = Math.random() < 0.5 ? -30 : canvas.height + 30;
-    }
-    enemies.push({ x, y, r: 15, hp: 1 + (player.lvl * 0.5), speed: 1 + Math.random() });
-}
-
-function createExplosion(x, y, color) {
-    for (let i = 0; i < 8; i++) {
-        particles.push({ x, y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 1, color });
-    }
+    const side = Math.floor(Math.random() * 4);
+    let x = side % 2 === 0 ? Math.random() * 1200 : (side === 1 ? 1250 : -50);
+    let y = side % 2 !== 0 ? Math.random() * 800 : (side === 0 ? -50 : 850);
+    let isHeavy = Math.random() > 0.9;
+    entities.enemies.push({ 
+        x, y, r: isHeavy ? 28 : 16, 
+        hp: (isHeavy ? 15 : 3) + (hour >= 23 ? 10 : 0), 
+        speed: (isHeavy ? 1.5 : 2.5) + (hour >= 22 ? 1 : 0),
+        color: isHeavy ? '#6c5ce7' : '#ff7675'
+    });
 }
 
 function update() {
     frame++;
     
-    // Day/Night Cycle (Switches every 1000 frames)
-    if (frame % 1000 === 0) {
-        isDay = !isDay;
-        document.getElementById('day-cycle').innerText = `TIME: ${isDay ? 'DAY' : 'NIGHT'}`;
+    // Time & Event Management
+    if (frame % 8 === 0) {
+        minute++;
+        if (minute >= 60) { minute = 0; hour++; }
+        if (hour >= 24) hour = 0;
+        document.getElementById('time-display').innerText = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
+        
+        // Extraction Spawn at Midnight
+        if (hour === 0 && !extractReady) {
+            extractReady = true;
+            extractX = Math.random() * 800 + 200;
+            extractY = Math.random() * 400 + 200;
+            document.getElementById('alert').style.opacity = 1;
+        }
     }
 
-    // Movement
+    // Player Movement
     if (keys['KeyW']) player.y -= player.speed;
     if (keys['KeyS']) player.y += player.speed;
     if (keys['KeyA']) player.x -= player.speed;
     if (keys['KeyD']) player.x += player.speed;
 
-    // Bullet Logic
-    bullets.forEach((b, bi) => {
-        b.x += b.vx; b.y += b.vy;
-        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(bi, 1);
-    });
+    // Enemy Spawning - Difficulty spikes after 10 PM
+    let spawnRate = hour >= 22 ? 15 : 45;
+    if (frame % spawnRate === 0) spawnEnemy();
 
-    // Enemy Logic
-    if (frame % (isDay ? 60 : 20) === 0) spawnEnemy();
-    enemies.forEach((en, ei) => {
-        let dx = player.x - en.x;
-        let dy = player.y - en.y;
-        let dist = Math.hypot(dx, dy);
-        en.x += (dx / dist) * en.speed;
-        en.y += (dy / dist) * en.speed;
+    // AI and Collision
+    entities.enemies.forEach((en, ei) => {
+        let dist = Math.hypot(player.x - en.x, player.y - en.y);
+        en.x += ((player.x - en.x) / dist) * en.speed;
+        en.y += ((player.y - en.y) / dist) * en.speed;
 
-        // Player collision
-        if (dist < player.r + en.r) {
-            player.hp -= 0.5;
-            createExplosion(player.x, player.y, '#f00');
-        }
+        if (dist < player.r + en.r) player.hp -= 0.5;
 
-        // Bullet collision
-        bullets.forEach((b, bi) => {
+        entities.bullets.forEach((b, bi) => {
             if (Math.hypot(b.x - en.x, b.y - en.y) < en.r) {
                 en.hp--;
-                bullets.splice(bi, 1);
+                entities.bullets.splice(bi, 1);
+                // Hit Effects
+                for(let i=0; i<2; i++) entities.blood.push({x: en.x, y: en.y, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, life: 1});
+                
                 if (en.hp <= 0) {
-                    kills++;
-                    gems.push({ x: en.x, y: en.y, r: 5 });
-                    enemies.splice(ei, 1);
-                    createExplosion(en.x, en.y, '#ff4757');
+                    scrap += (en.r > 20 ? 200 : 50);
+                    entities.enemies.splice(ei, 1);
                 }
             }
         });
     });
 
-    // Gem Collection
-    gems.forEach((g, gi) => {
-        if (Math.hypot(player.x - g.x, player.y - g.y) < player.r + g.r) {
-            player.xp += 20;
-            gems.splice(gi, 1);
-            if (player.xp >= 100) {
-                player.lvl++;
-                player.xp = 0;
-                player.maxHp += 10;
-                player.hp = player.maxHp;
-            }
-        }
+    // Bullets
+    entities.bullets.forEach((b, i) => {
+        b.x += b.vx; b.y += b.vy;
+        if (b.x < 0 || b.x > 1200 || b.y < 0 || b.y > 800) entities.bullets.splice(i, 1);
     });
 
-    particles.forEach((p, pi) => {
-        p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-        if (p.life <= 0) particles.splice(pi, 1);
-    });
+    // Extraction Check
+    if (extractReady && Math.hypot(player.x - extractX, player.y - extractY) < 50) {
+        alert(`EXTRACTION SUCCESSFUL! SCRAP COLLECTED: $${scrap}`);
+        location.reload();
+    }
 
-    // UI
-    document.getElementById('hp-fill').style.width = (player.hp / player.maxHp * 100) + '%';
-    document.getElementById('xp-fill').style.width = player.xp + '%';
-    document.getElementById('lvl').innerText = player.lvl;
-    document.getElementById('score').innerText = `KILLS: ${kills}`;
-
-    if (player.hp <= 0) location.reload();
+    // UI Updates
+    document.getElementById('hp-fill').style.width = player.hp + '%';
+    document.getElementById('scrap-display').innerText = `$ ${scrap}`;
+    if (player.hp <= 0) { alert("MIA: YOU DIED IN THE ZONE"); location.reload(); }
 }
 
 function draw() {
-    ctx.fillStyle = isDay ? '#0a0a0a' : '#020205';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    mCtx.clearRect(0, 0, 180, 180);
 
-    // Grid effect
-    ctx.strokeStyle = isDay ? '#111' : '#050515';
-    for(let i=0; i<canvas.width; i+=50) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,600); ctx.stroke(); }
-    for(let i=0; i<canvas.height; i+=50) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(900,i); ctx.stroke(); }
+    // Blood Stains
+    entities.blood.forEach((bl, i) => {
+        ctx.fillStyle = `rgba(214, 48, 49, ${bl.life})`;
+        ctx.fillRect(bl.x, bl.y, 3, 3);
+        bl.life -= 0.01; if (bl.life <= 0) entities.blood.splice(i, 1);
+    });
 
-    // Gems
-    ctx.fillStyle = '#2ed573';
-    gems.forEach(g => { ctx.beginPath(); ctx.arc(g.x, g.y, g.r, 0, Math.PI*2); ctx.fill(); });
+    // Extraction Zone
+    if (extractReady) {
+        ctx.strokeStyle = '#00ff41';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(extractX, extractY, 50 + Math.sin(frame/10)*10, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(0, 255, 65, 0.1)';
+        ctx.fill();
+    }
 
     // Enemies
-    ctx.fillStyle = '#ff4757';
-    enemies.forEach(en => { ctx.beginPath(); ctx.arc(en.x, en.y, en.r, 0, Math.PI*2); ctx.fill(); });
+    entities.enemies.forEach(en => {
+        ctx.fillStyle = en.color;
+        ctx.beginPath(); ctx.arc(en.x, en.y, en.r, 0, Math.PI*2); ctx.fill();
+        // Minimap
+        mCtx.fillStyle = '#ff7675';
+        mCtx.fillRect(90 + (en.x - player.x)/10, 90 + (en.y - player.y)/10, 3, 3);
+    });
 
     // Bullets
-    ctx.fillStyle = '#f1c40f';
-    bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill(); });
-
-    // Particles
-    particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); });
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fdcb6e';
+    entities.bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill(); });
 
     // Player
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.angle);
-    ctx.fillStyle = '#00d2ff';
-    ctx.fillRect(-12, -12, 24, 24); // Body
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(8, -8, 6, 4); // Eye 1
-    ctx.fillRect(8, 4, 6, 4);  // Eye 2
-    ctx.restore();
+    ctx.fillStyle = '#0984e3';
+    ctx.fillRect(player.x-16, player.y-16, 32, 32);
+    mCtx.fillStyle = '#0984e3';
+    mCtx.fillRect(88, 88, 4, 4); // Center of minimap
 
-    // Night overlay (Vignette)
-    if (!isDay) {
-        let grad = ctx.createRadialGradient(player.x, player.y, 50, player.x, player.y, 250);
-        grad.addColorStop(0, 'rgba(0,0,0,0)');
-        grad.addColorStop(1, 'rgba(0,0,0,0.9)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0,0, canvas.width, canvas.height);
-    }
-}
+    // Vignette / Lighting
+    let darkness = (hour >= 20 || hour < 6) ? 0.7 : 0;
+    let grd = ctx.createRadialGradient(player.x, player.y, 50, player.x, player.y, 400);
+    grd.addColorStop(0, "rgba(0,0,0,0)");
+    grd.addColorStop(1, `rgba(0,0,0,${darkness})`);
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,1200,800);
 
-function loop() {
     update();
-    draw();
-    requestAnimationFrame(loop);
+    requestAnimationFrame(draw);
 }
-loop();
+
+window.onmousedown = (e) => {
+    let r = canvas.getBoundingClientRect();
+    let angle = Math.atan2(e.clientY - r.top - player.y, e.clientX - r.left - player.x);
+    entities.bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*15, vy: Math.sin(angle)*15 });
+};
+
+draw();
 </script>
 </body>
 </html>
