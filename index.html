@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spiral Drop - Earn Cash</title>
+    <title>Spiral Drop</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; user-select: none; }
         #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; z-index: 10; }
@@ -29,14 +29,13 @@
 
 <div id="message">
     <h1 id="msg-text">GAME OVER</h1>
-    <p id="final-stats"></p>
     <p class="tap-to-start">TAP TO RESTART</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-/** GAME LOGIC **/
+/** CLEAN GAME LOGIC **/
 let scene, camera, renderer, ball, tower, platforms = [];
 let score = 0, coins = parseInt(localStorage.getItem('stackBallCoins')) || 0;
 let currentLevel = 1, isPressing = false, gameOver = false;
@@ -114,9 +113,6 @@ function endGame(win) {
     gameOver = true;
     document.getElementById('message').style.display = 'block';
     
-    // This opens your specific Monetag ad link
-    window.open('https://omg10.com/4/10866628', '_blank');
-
     if (win) {
         document.getElementById('msg-text').innerText = "WIN!";
         coins += 100;
