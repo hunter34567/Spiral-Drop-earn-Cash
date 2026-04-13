@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spiral Drop - Level Master</title>
+    <title>Spiral Drop - Permanent Edition</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; user-select: none; }
         #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; z-index: 10; display: none; }
@@ -63,8 +63,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-/** MASTER DATA **/
-const SAVE_KEY = 'SpiralDrop_LevelMaster_v5';
+/** PERMANENT SAVE KEY - DO NOT CHANGE **/
+const SAVE_KEY = 'SpiralDrop_Master_Save';
+
 let playerData = JSON.parse(localStorage.getItem(SAVE_KEY)) || {
     coins: 200,
     shields: 3,
@@ -120,7 +121,6 @@ window.equip = (i) => { playerData.currentSkin = i; saveGame(); renderShop(); if
 /** ENGINE **/
 let scene, camera, renderer, ball, tower, platforms = [];
 let score = 0, isPressing = false, gameOver = false;
-// UPDATED PHYSICS: Reduced gravity and smash velocity for better control
 let ballVelocity = 0, gravity = -0.01, bounce = 0.22, smash = -0.28;
 
 init();
@@ -148,7 +148,14 @@ function init() {
 
     document.getElementById('coin-revive-btn').onclick = () => { if(playerData.coins >= 200) { playerData.coins -= 200; continueGame(); } };
     document.getElementById('shield-revive-btn').onclick = () => { if(playerData.shields > 0) { playerData.shields -= 1; continueGame(); } };
-    document.getElementById('skip-revive-btn').onclick = () => { if(score > playerData.highScore) playerData.highScore = score; document.getElementById('revive-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; document.getElementById('ui').style.display = 'none'; saveGame(); updateUI(); };
+    document.getElementById('skip-revive-btn').onclick = () => { 
+        if (score > playerData.highScore) playerData.highScore = score; 
+        document.getElementById('revive-menu').style.display = 'none'; 
+        document.getElementById('main-menu').style.display = 'flex'; 
+        document.getElementById('ui').style.display = 'none'; 
+        saveGame(); 
+        updateUI(); 
+    };
 
     window.addEventListener('mousedown', () => { if(!gameOver) isPressing = true; });
     window.addEventListener('mouseup', () => isPressing = false);
@@ -200,8 +207,13 @@ function animate() {
             let rot = (tower.rotation.y + p.rotation.y) % (Math.PI * 2);
             if (rot < 0) rot += Math.PI * 2;
             if (isPressing) {
-                // UPDATED HITBOX: Made the safe gap slightly larger (0.2 -> 0.35)
-                if (rot > 5.3 || rot < 0.05) { gameOver = true; document.getElementById('current-revive-score').innerText = score; document.getElementById('revive-menu').style.display = 'flex'; }
+                if (rot > 5.3 || rot < 0.05) { 
+                    gameOver = true; 
+                    if (score > playerData.highScore) playerData.highScore = score;
+                    saveGame();
+                    document.getElementById('current-revive-score').innerText = score; 
+                    document.getElementById('revive-menu').style.display = 'flex'; 
+                }
                 else { p.visible = false; platforms.splice(i, 1); score += 10; document.getElementById('score').innerText = score; if (platforms.length === 0) levelWin(); }
             } else if (ballVelocity < 0) { ballVelocity = bounce; ball.position.y = p.position.y + 0.3; }
         }
