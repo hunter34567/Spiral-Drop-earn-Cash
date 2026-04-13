@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spiral Drop - Permanent Edition</title>
+    <title>Spiral Drop - Kitty Edition</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; user-select: none; }
         #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; z-index: 10; display: none; }
         #score-container { font-size: 42px; font-weight: 900; }
         .stat-box { display: inline-block; background: rgba(0,0,0,0.4); padding: 5px 15px; border-radius: 20px; margin: 5px; border: 1px solid rgba(255,255,255,0.1); pointer-events: auto; }
-        #level-indicator { font-size: 18px; color: #4caf50; font-weight: bold; margin-bottom: 5px; }
+        #level-indicator { font-size: 18px; color: #ff69b4; font-weight: bold; margin-bottom: 5px; }
         
         #main-menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #2c3e50 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; color: white; }
-        .play-btn { background: #4caf50; color: white; font-size: 28px; font-weight: bold; padding: 15px 60px; border-radius: 50px; border: none; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3); margin: 10px; }
+        .play-btn { background: #ff69b4; color: white; font-size: 28px; font-weight: bold; padding: 15px 60px; border-radius: 50px; border: none; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3); margin: 10px; }
         
         #revive-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30,30,30,0.95); width: 80%; max-width: 350px; border-radius: 30px; display: none; z-index: 100; flex-direction: column; padding: 30px; border: 2px solid #ff9800; color: white; text-align: center; }
         .revive-btn { background: #ff9800; border: none; color: white; padding: 15px; border-radius: 15px; margin: 10px 0; cursor: pointer; font-weight: bold; width: 100%; }
         .shield-btn { background: #2196f3; border: none; color: white; padding: 15px; border-radius: 15px; margin: 10px 0; cursor: pointer; font-weight: bold; width: 100%; }
         
-        #shop-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); width: 90%; max-width: 400px; height: 80vh; border-radius: 30px; display: none; z-index: 110; flex-direction: column; padding: 20px; border: 2px solid #ffd700; color: white; }
+        #shop-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); width: 90%; max-width: 400px; height: 80vh; border-radius: 30px; display: none; z-index: 110; flex-direction: column; padding: 20px; border: 2px solid #ff69b4; color: white; }
         #skin-list { overflow-y: auto; flex-grow: 1; }
         .skin-item { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; margin: 8px 0; border-radius: 15px; }
         canvas { display: block; touch-action: none; }
@@ -27,8 +27,8 @@
 <body>
 
 <div id="main-menu">
-    <h1 style="font-size: 50px; color: #4caf50; margin-bottom:0;">SPIRAL DROP</h1>
-    <p style="color: #4caf50; font-weight: bold;">LEVEL <span id="menu-level-text">1</span></p>
+    <h1 style="font-size: 50px; color: #ff69b4; margin-bottom:0;">SPIRAL DROP</h1>
+    <p style="color: #ff69b4; font-weight: bold;">LEVEL <span id="menu-level-text">1</span></p>
     <p style="color: #aaa; margin-top:0;">BEST SCORE: <span id="menu-high-score">0</span></p>
     <div style="margin-bottom: 20px;">
         <span class="stat-box">🪙 <span id="menu-coins">0</span></span>
@@ -56,7 +56,7 @@
 
 <div id="shop-menu">
     <div id="close-shop" style="text-align:right; cursor:pointer; font-size:24px;">✕</div>
-    <h2 style="text-align: center; color: #ffd700; margin-top:0;">BALL SKINS</h2>
+    <h2 style="text-align: center; color: #ff69b4; margin-top:0;">BALL SKINS</h2>
     <div id="skin-list"></div>
 </div>
 
@@ -76,11 +76,12 @@ let playerData = JSON.parse(localStorage.getItem(SAVE_KEY)) || {
 };
 
 const SKINS = [
-    { name: "Classic", color: 0xffffff, price: 0 },
-    { name: "Toxic", color: 0x32ff00, price: 300 },
-    { name: "Ocean", color: 0x00ccff, price: 1000 },
-    { name: "Gold", color: 0xffd700, price: 5000 },
-    { name: "Galaxy", color: 0x222222, price: 10000 }
+    { name: "Classic", color: 0xffffff, price: 0, special: false },
+    { name: "Hello Kitty", color: 0xffc0cb, price: 800, special: "kitty" },
+    { name: "Toxic", color: 0x32ff00, price: 300, special: false },
+    { name: "Ocean", color: 0x00ccff, price: 1000, special: false },
+    { name: "Gold", color: 0xffd700, price: 5000, special: false },
+    { name: "Galaxy", color: 0x222222, price: 10000, special: false }
 ];
 
 function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(playerData)); }
@@ -104,7 +105,7 @@ function renderShop() {
     SKINS.forEach((skin, index) => {
         const isOwned = playerData.ownedSkins.includes(index);
         const isEquipped = playerData.currentSkin === index;
-        let btnHTML = isEquipped ? '<span style="color:#4caf50;">EQUIPPED</span>' : 
+        let btnHTML = isEquipped ? '<span style="color:#ff69b4;">EQUIPPED</span>' : 
                      (isOwned ? `<button onclick="equip(${index})" style="background:#2196f3; color:white; border:none; padding:5px 10px; border-radius:5px;">EQUIP</button>` : 
                      `<button onclick="buy(${index})" style="background:#ffd700; border:none; padding:5px 10px; border-radius:5px;">🪙 ${skin.price}</button>`);
         
@@ -116,7 +117,7 @@ function renderShop() {
 }
 
 window.buy = (i) => { if(playerData.coins >= SKINS[i].price) { playerData.coins -= SKINS[i].price; playerData.ownedSkins.push(i); saveGame(); renderShop(); updateUI(); } };
-window.equip = (i) => { playerData.currentSkin = i; saveGame(); renderShop(); if(ball) ball.material.color.setHex(SKINS[i].color); };
+window.equip = (i) => { playerData.currentSkin = i; saveGame(); renderShop(); if(ball) createBall(); };
 
 /** ENGINE **/
 let scene, camera, renderer, ball, tower, platforms = [];
@@ -165,9 +166,33 @@ function init() {
 
 function continueGame() { document.getElementById('revive-menu').style.display = 'none'; gameOver = false; ball.position.y += 2.5; ballVelocity = 0; saveGame(); updateUI(); }
 
+function createBall() {
+    if(ball) scene.remove(ball);
+    ball = new THREE.Group();
+    
+    const skin = SKINS[playerData.currentSkin];
+    const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 32), new THREE.MeshPhongMaterial({ color: skin.color }));
+    ball.add(ballMesh);
+
+    // If Hello Kitty is equipped, add ears!
+    if(skin.special === "kitty") {
+        const earGeo = new THREE.ConeGeometry(0.15, 0.2, 4);
+        const earMat = new THREE.MeshPhongMaterial({ color: skin.color });
+        const leftEar = new THREE.Mesh(earGeo, earMat);
+        leftEar.position.set(-0.2, 0.3, 0);
+        leftEar.rotation.z = 0.3;
+        const rightEar = new THREE.Mesh(earGeo, earMat);
+        rightEar.position.set(0.2, 0.3, 0);
+        rightEar.rotation.z = -0.3;
+        ball.add(leftEar, rightEar);
+    }
+
+    ball.position.set(0, 1, 2.5);
+    scene.add(ball);
+}
+
 function createLevel() {
     if(tower) scene.remove(tower);
-    if(ball) scene.remove(ball);
     platforms = []; gameOver = false; score = 0;
     document.getElementById('score').innerText = "0";
     tower = new THREE.Group();
@@ -187,9 +212,7 @@ function createLevel() {
         tower.add(p);
         platforms.push(p);
     }
-    ball = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 32), new THREE.MeshPhongMaterial({ color: SKINS[playerData.currentSkin].color }));
-    ball.position.set(0, 1, 2.5);
-    scene.add(ball);
+    createBall();
 }
 
 function animate() {
